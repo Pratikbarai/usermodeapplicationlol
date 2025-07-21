@@ -1,0 +1,20 @@
+﻿  userlolblock.cpp
+  otpverify.cpp
+D:\window driver projects\usermodeapplicationlol\krabs\userlolblock.cpp(130,33): error C2665: 'krabs::schema::schema': no overloaded function could convert all the argument types
+      D:\window driver projects\usermodeapplicationlol\krabs\krabs\schema.hpp(286,5):
+      could be 'krabs::schema::schema(krabs::schema &&)'
+          D:\window driver projects\usermodeapplicationlol\krabs\userlolblock.cpp(130,33):
+          'krabs::schema::schema(krabs::schema &&)': cannot convert argument 1 from 'EVENT_RECORD *' to 'krabs::schema &&'
+              D:\window driver projects\usermodeapplicationlol\krabs\userlolblock.cpp(130,34):
+              Reason: cannot convert from 'EVENT_RECORD *' to 'krabs::schema'
+      D:\window driver projects\usermodeapplicationlol\krabs\krabs\schema.hpp(286,5):
+      or       'krabs::schema::schema(const krabs::schema &)'
+          D:\window driver projects\usermodeapplicationlol\krabs\userlolblock.cpp(130,33):
+          'krabs::schema::schema(const krabs::schema &)': cannot convert argument 1 from 'EVENT_RECORD *' to 'const krabs::schema &'
+              D:\window driver projects\usermodeapplicationlol\krabs\userlolblock.cpp(130,34):
+              Reason: cannot convert from 'EVENT_RECORD *' to 'const krabs::schema'
+      D:\window driver projects\usermodeapplicationlol\krabs\userlolblock.cpp(130,33):
+      while trying to match the argument list '(EVENT_RECORD *)'
+  
+  usermodeapplicationlol.cpp
+  Generating Code...
