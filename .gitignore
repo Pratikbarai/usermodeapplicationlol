@@ -1,11 +1,64 @@
-*.exe
-*.pdb
-*.obj
-*.ipch
-*.db
-*.VC.db
+# Visual Studio
+.vs/
 *.suo
 *.user
-.vs/
-x64/Release/
-x64/Debug/
+*.VC.db
+*.VC.opendb
+
+# Build intermediates (but NOT x64/ or .exe)
+*.obj
+*.ipdb
+*.iobj
+*.log
+*.tlog
+*.pch
+*.idb
+*.pdb
+*.ilk
+*.aps
+*.ncb
+*.sdf
+*.cache
+*.opensdf
+*.sbr
+*.res
+*.exp
+*.lib
+*.dll
+*.bsc
+*.rsp
+*.tmp
+*.bak
+*.lastbuildstate
+*.tlog
+*.lastcodeanalysissucceeded
+*.db
+*.sbr
+*.scc
+*.vssscc
+*.vssscc
+*.scc
+*.suo
+*.sdf
+*.cache
+*.ipch
+*.aps
+*.ncb
+*.sbr
+*.sdf
+*.opensdf
+*.suo
+*.userosscache
+*.unsuccessfulbuild
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Ignore git and system files
+.DS_Store
+Thumbs.db
+
+# Do NOT ignore .exe or x64/ (user wants to upload these)
+# !*.exe
+# !x64/ 

