@@ -1,4 +1,5 @@
 #include "krabs/krabs.hpp"
+#include "resource.h" // For our native dialog
 #include <windows.h>
 #include <tlhelp32.h>
 #include <shlwapi.h>
@@ -10,7 +11,6 @@
 #include <mutex>
 #include <fstream>
 #include <chrono>
-#include <cstdio>
 #include <ctime>
 #include <sstream>
 #include <future>
@@ -20,6 +20,7 @@
 #include <functional>
 #include <psapi.h>
 #include <wincrypt.h>
+
 #pragma comment(lib, "psapi.lib")
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "crypt32.lib")
@@ -934,6 +935,20 @@ bool is_hollowed_process(DWORD pid) {
     return hollowed;
 }
 int main() {
+    BOOL isElevated = FALSE;
+    HANDLE hToken = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        TOKEN_ELEVATION elevation;
+        DWORD cbSize = sizeof(TOKEN_ELEVATION);
+        if (GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &cbSize)) {
+            isElevated = elevation.TokenIsElevated;
+        }
+        CloseHandle(hToken);
+    }
+    if (!isElevated) {
+        MessageBoxW(NULL, L"This program requires administrator privileges to monitor system events. Please re-run as an Administrator.", L"Error", MB_ICONERROR | MB_OK);
+        return 1;
+    }
     try {
         // Initialize thread pool with 4 workers
         ThreadPool pool(4);
