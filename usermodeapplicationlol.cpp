@@ -20,7 +20,8 @@
 #include <functional>
 #include <psapi.h>
 #include <wincrypt.h>
-
+#include <shellapi.h>
+#pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "psapi.lib")
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "crypt32.lib")
@@ -934,58 +935,209 @@ bool is_hollowed_process(DWORD pid) {
     CloseHandle(hProcess);
     return hollowed;
 }
-int main() {
+bool IsProcessElevatedEnhanced() {
     BOOL isElevated = FALSE;
     HANDLE hToken = NULL;
-    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
-        TOKEN_ELEVATION elevation;
-        DWORD cbSize = sizeof(TOKEN_ELEVATION);
-        if (GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &cbSize)) {
-            isElevated = elevation.TokenIsElevated;
-        }
+
+    // Try to open the process token
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        DWORD error = GetLastError();
+        std::wcout << L"Failed to open process token. Error: " << error << std::endl;
+        return false;
+    }
+
+    // Get token elevation information
+    TOKEN_ELEVATION elevation;
+    DWORD cbSize = sizeof(TOKEN_ELEVATION);
+
+    if (!GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &cbSize)) {
+        DWORD error = GetLastError();
+        std::wcout << L"Failed to get token information. Error: " << error << std::endl;
         CloseHandle(hToken);
+        return false;
     }
-    if (!isElevated) {
-        MessageBoxW(NULL, L"This program requires administrator privileges to monitor system events. Please re-run as an Administrator.", L"Error", MB_ICONERROR | MB_OK);
-        return 1;
+
+    CloseHandle(hToken);
+    return elevation.TokenIsElevated != 0;
+}
+
+// Alternative method - check if we can access system directories
+bool CanAccessSystemDirectory() {
+    HANDLE hFile = CreateFileW(L"C:\\Windows\\System32\\drivers\\etc\\hosts",
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL);
+
+    if (hFile != INVALID_HANDLE_VALUE) {
+        CloseHandle(hFile);
+        return true;
     }
+    return false;
+}
+// Add this function before main()
+bool EnableRequiredPrivileges() {
+    HANDLE hToken;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) {
+        std::wcout << L"Failed to open process token for privileges. Error: " << GetLastError() << std::endl;
+        return false;
+    }
+
+    // List of privileges needed for ETW
+    const wchar_t* privileges[] = {
+        SE_DEBUG_NAME,           // SeDebugPrivilege - needed for process monitoring
+        SE_SYSTEM_PROFILE_NAME,  // SeSystemProfilePrivilege - needed for ETW
+        SE_PROF_SINGLE_PROCESS_NAME, // SeProfileSingleProcessPrivilege
+        SE_INC_BASE_PRIORITY_NAME,   // SeIncreaseBasePriorityPrivilege
+        SE_LOAD_DRIVER_NAME      // SeLoadDriverPrivilege - sometimes needed for kernel providers
+    };
+
+    bool allSucceeded = true;
+
+    for (const wchar_t* privName : privileges) {
+        TOKEN_PRIVILEGES tp;
+        tp.PrivilegeCount = 1;
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+
+        if (LookupPrivilegeValueW(NULL, privName, &tp.Privileges[0].Luid)) {
+            if (!AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), NULL, NULL)) {
+                std::wcout << L"Failed to enable privilege: " << privName << L". Error: " << GetLastError() << std::endl;
+                allSucceeded = false;
+            }
+            else {
+                std::wcout << L"Enabled privilege: " << privName << std::endl;
+            }
+        }
+        else {
+            std::wcout << L"Failed to lookup privilege: " << privName << L". Error: " << GetLastError() << std::endl;
+            allSucceeded = false;
+        }
+    }
+
+    CloseHandle(hToken);
+    return allSucceeded;
+}
+// Updated main function section
+int main() {
+    // Multiple elevation checks
+    bool isElevated1 = IsProcessElevatedEnhanced();
+    bool isElevated2 = CanAccessSystemDirectory();
+
+    DWORD pid = GetCurrentProcessId();
+    std::wstring msg = L"Process ID: " + std::to_wstring(pid) +
+        L"\nMethod 1 (Token): " + (isElevated1 ? L"Administrator" : L"NOT Administrator") +
+        L"\nMethod 2 (File Access): " + (isElevated2 ? L"Administrator" : L"NOT Administrator");
+
+    MessageBoxW(NULL, msg.c_str(), L"Elevation Check", MB_OK | MB_ICONINFORMATION);
+
+    // Use the more reliable check or combine both
+    bool finalElevationStatus = isElevated1 || isElevated2;
+
+    if (!finalElevationStatus) {
+        int result = MessageBoxW(NULL,
+            L"This application requires administrator privileges to monitor system events.\n\n"
+            L"Click Yes to restart with elevation, or No to continue anyway (monitoring may fail).",
+            L"Administrator Rights Required",
+            MB_YESNO | MB_ICONWARNING);
+
+        if (result == IDYES) {
+            // Relaunch self with elevated rights
+            wchar_t exePath[MAX_PATH] = { 0 };
+            GetModuleFileNameW(NULL, exePath, MAX_PATH);
+
+            SHELLEXECUTEINFOW sei = { sizeof(sei) };
+            sei.lpVerb = L"runas";
+            sei.lpFile = exePath;
+            sei.hwnd = NULL;
+            sei.nShow = SW_SHOWNORMAL;
+
+            if (!ShellExecuteExW(&sei)) {
+                DWORD dwError = GetLastError();
+                std::wstring errorMsg = L"Failed to elevate. Error: " + std::to_wstring(dwError);
+                if (dwError == ERROR_CANCELLED) {
+                    errorMsg += L" (UAC prompt was cancelled)";
+                }
+                MessageBoxW(NULL, errorMsg.c_str(), L"Elevation Failed", MB_ICONERROR | MB_OK);
+                return 1;
+            }
+            return 0; // Exit this instance, elevated one will start
+        }
+        // If user chose No, continue without elevation (may have limited functionality)
+    }
+    // Enable required privileges for ETW
+    std::cout << "Enabling required privileges for ETW monitoring..." << std::endl;
+    if (!EnableRequiredPrivileges()) {
+        std::cout << "Warning: Some privileges could not be enabled. ETW monitoring may fail." << std::endl;
+    }
+    // Continue with ETW monitoring...
+   // Replace your ETW setup section with this:
+    // Replace your ETW setup section with this:
     try {
         // Initialize thread pool with 4 workers
         ThreadPool pool(4);
         g_threadPool = &pool;
-        // Set up the ETW trace
-        krabs::user_trace trace(L"lolblockotp");
-        krabs::provider<> provider(krabs::guid(L"{22FB2CD6-0E7B-422B-A0C7-2FAD1FD0E716}")); // Microsoft-Windows-Kernel-Process
 
-        provider.any(0x10); // WINEVENT_KEYWORD_PROCESS
-        provider.add_on_event_callback(process_event_callback);
-        trace.enable(provider);
-        // Memory operations provider
-        krabs::provider<> mem_provider(krabs::guid(L"{F4E1897C-BB5D-5668-F1D8-040F4D8DD344}"));
-        mem_provider.any(0xFFFFFFFF); // All events
-        mem_provider.add_on_event_callback(memory_event_callback);
-        trace.enable(mem_provider);
+        std::cout << "Setting up ETW trace with unique session name..." << std::endl;
 
-        // DLL load provider
-        krabs::provider<> dll_provider(krabs::guid(L"{2cb15d1d-5fc1-11d2-abe1-00a0c911f518}"));
-        dll_provider.add_on_event_callback(dll_load_callback);
-        trace.enable(dll_provider);
+        // Create a unique session name to avoid conflicts
+        std::wstring sessionName = L"lolblockotp_" + std::to_wstring(GetCurrentProcessId());
 
-        // Registry provider
-        krabs::provider<> reg_provider(krabs::guid(L"{70EB4F03-C1DE-4F73-A051-33D13D5413BD}"));
-        reg_provider.add_on_event_callback(registry_event_callback);
-        trace.enable(reg_provider);
-        // Start the trace
-        std::cout << "Starting lolblockotp monitoring..." << std::endl;
-        logEvent(LOG_ALL, "lolblockotp service started");
-        trace.start();
+        // Try kernel trace first (often more reliable)
+        try {
+            std::cout << "Attempting kernel trace..." << std::endl;
+            krabs::kernel_trace trace;
 
+            // Enable process events using the correct krabs API
+            krabs::kernel::process_provider provider;
+            provider.add_on_event_callback(process_event_callback);
+            trace.enable(provider);
+
+            std::cout << "Starting kernel trace monitoring..." << std::endl;
+            logEvent(LOG_ALL, "lolblockotp kernel service started");
+
+            trace.start(); // This blocks
+        }
+        catch (const std::exception& kernel_error) {
+            std::cout << "Kernel trace failed: " << kernel_error.what() << std::endl;
+            std::cout << "Falling back to user trace..." << std::endl;
+
+            // Fallback to user trace with unique name
+            krabs::user_trace trace(sessionName.c_str());
+
+            std::cout << "Setting up process provider..." << std::endl;
+            krabs::provider<> provider(krabs::guid(L"{22FB2CD6-0E7B-422B-A0C7-2FAD1FD0E716}"));
+            provider.any(0x10);
+            provider.add_on_event_callback(process_event_callback);
+            trace.enable(provider);
+
+            std::cout << "Starting user trace monitoring..." << std::endl;
+            logEvent(LOG_ALL, "lolblockotp user service started");
+
+            trace.start(); // This blocks
+        }
     }
     catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        std::cerr << "Final error: " << e.what() << std::endl;
         logEvent(LOG_ALL, std::string("Fatal error: ") + e.what());
-        return 1;
+
+        // Last resort: try with administrator check bypass
+        std::cout << "Attempting to bypass krabs admin check..." << std::endl;
+
+        try {
+            // Sometimes works with a very simple setup
+            krabs::user_trace simple_trace(L"SimpleTrace");
+            krabs::provider<> simple_provider(krabs::guid(L"{22FB2CD6-0E7B-422B-A0C7-2FAD1FD0E716}"));
+            simple_provider.add_on_event_callback(process_event_callback);
+            simple_trace.enable(simple_provider);
+
+            std::cout << "Simple trace started..." << std::endl;
+            simple_trace.start();
+        }
+        catch (const std::exception& final_error) {
+            std::cerr << "All ETW methods failed: " << final_error.what() << std::endl;
+            return 1;
+        }
     }
-    g_threadPool = nullptr;
-    return 0;
 }
